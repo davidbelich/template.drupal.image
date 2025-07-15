@@ -19,6 +19,9 @@
         "drupal/core-composer-scaffold": "^11.1",
         "drupal/core-project-message": "^11.1",
         "drupal/core-recommended": "^11.1",
+        "drupal/entity": "^1.5",
+        "drupal/plugin": "^2.13",
+        "drush/drush": "^13.3",
         "phpspec/prophecy-phpunit": "^2.3"
     },
     "conflict": {
