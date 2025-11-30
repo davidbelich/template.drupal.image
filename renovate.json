@@ -2,7 +2,6 @@
   "extends": ["config:base"],
   "timezone": "UTC",
   "schedule": ["before 5am on monday"],
-  "platformRateLimit": 150,
   "prCreation": "branch",
   "dependencyDashboard": true,
   "packageRules": [
