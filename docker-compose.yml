@@ -9,7 +9,7 @@ services:
     depends_on:
       - db
   db:
-    image: mariadb:10.6
+    image: mariadb:10.11
     environment:
       MYSQL_DATABASE: drupal
       MYSQL_USER: drupal
