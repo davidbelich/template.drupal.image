@@ -102,6 +102,6 @@
     },
     "require-dev": {
         "behat/mink": "^1.12",
-        "phpunit/phpunit": "^10.5"
+        "phpunit/phpunit": "^12.0"
     }
 }
