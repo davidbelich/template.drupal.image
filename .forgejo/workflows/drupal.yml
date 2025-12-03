@@ -9,7 +9,7 @@ on:
 
 jobs:
   drupal-test:
-    runs-on: ubuntu-latest            # Forgejo’s default runner image
+    runs-on: codeberg-small            # Forgejo’s default runner image
     services:
       mysql:
         image: mysql:8.0
