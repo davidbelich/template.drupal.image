@@ -1,0 +1,103 @@
+# .forgejo/workflows/drupal.yml
+name: Drupal CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  drupal-test:
+    runs-on: ubuntu-latest            # Forgejo’s default runner image
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: drupal
+          MYSQL_USER: drupal
+          MYSQL_PASSWORD: drupal
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1️⃣ Checkout the repo
+      # ------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 2️⃣ Set up PHP + extensions needed by Drupal
+      # ------------------------------------------------------------------
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, intl, pdo_mysql, gd, zip, opcache
+          ini-values: |
+            memory_limit = 512M
+            max_execution_time = 300
+
+      # ------------------------------------------------------------------
+      # 3️⃣ Install Composer dependencies (Drupal core + any modules)
+      # ------------------------------------------------------------------
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --optimize-autoloader
+
+      # ------------------------------------------------------------------
+      # 4️⃣ Create a temporary settings file pointing at the MySQL service
+      # ------------------------------------------------------------------
+      - name: Prepare settings.php
+        run: |
+          cp web/sites/default/default.settings.php web/sites/default/settings.php
+          echo "\$databases['default']['default'] = [
+            'driver' => 'mysql',
+            'database' => 'drupal',
+            'username' => 'drupal',
+            'password' => 'drupal',
+            'host' => '127.0.0.1',
+            'port' => '3306',
+            'prefix' => '',
+          ];" >> web/sites/default/settings.php
+          chmod 664 web/sites/default/settings.php
+
+      # ------------------------------------------------------------------
+      # 5️⃣ Site installation (minimal profile) + DB update
+      # ------------------------------------------------------------------
+      - name: Install Drupal site
+        env:
+          DRUPAL_SITE_NAME: "CI Test Site"
+          DRUPAL_ACCOUNT_NAME: admin
+          DRUPAL_ACCOUNT_PASS: admin123
+        run: |
+          vendor/bin/drush site:install minimal \
+            --site-name="${DRUPAL_SITE_NAME}" \
+            --account-name="${DRUPAL_ACCOUNT_NAME}" \
+            --account-pass="${DRUPAL_ACCOUNT_PASS}" \
+            --yes
+
+      - name: Run database updates
+        run: vendor/bin/drush updatedb -y
+
+      # ------------------------------------------------------------------
+      # 6️⃣ Enable a few core modules to prove “enable stuff” works
+      # ------------------------------------------------------------------
+      - name: Enable core modules
+        run: |
+          vendor/bin/drush en path,toolbar,block -y
+
+      # ------------------------------------------------------------------
+      # 7️⃣ Run Drupal's built‑in PHPUnit tests (smoke test)
+      # ------------------------------------------------------------------
+      - name: Run PHPUnit
+        run: |
+          # Ensure the test environment knows where Drupal lives
+          export SIMPLETEST_BASE_URL="http://localhost"
+          export SIMPLETEST_DB="mysql://drupal:drupal@127.0.0.1:3306/drupal"
+          vendor/bin/phpunit -c core phpunit.xml.dist --testsuite=unit --exclude-group=skipOnTravis
