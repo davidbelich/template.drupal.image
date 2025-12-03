@@ -9,11 +9,11 @@ on:
 
 jobs:
   drupal-test:
-    # Run the whole job inside a PHP image that already has the interpreter.
-    runs-on: codeberg-small
+    # One container that provides BOTH Node (for actions) AND PHP (for our script)
+    runs-on: ubuntu-latest
     container:
-      image: php:8.2-cli               # Official PHP CLI image (Debian‑based)
-      options: --user root             # Needed so we can apt‑get install packages
+      image: node:20-bullseye          # Node pre‑installed
+      options: --user root
 
     services:
       mysql:
@@ -32,37 +32,38 @@ jobs:
 
     steps:
       # --------------------------------------------------------------
-      # 1️⃣ Checkout the repository (Forgejo provides the same step)
+      # 1️⃣ Checkout the repository (needs Node → now works)
       # --------------------------------------------------------------
       - name: Checkout code
-        uses: actions/checkout@v4   # This is a generic checkout step that works on Forgejo
+        uses: actions/checkout@v4
 
       # --------------------------------------------------------------
-      # 2️⃣ Install system dependencies (PHP extensions, git, unzip)
+      # 2️⃣ Install OS packages: PHP, extensions, git, unzip, etc.
       # --------------------------------------------------------------
-      - name: Install OS packages & PHP extensions
+      - name: Install PHP, extensions & utilities
         run: |
-          apt-get update && apt-get install -y \
-            git \
-            unzip \
-            libzip-dev \
-            libpng-dev \
-            libjpeg62-turbo-dev \
-            libfreetype6-dev \
-            zlib1g-dev \
-            libicu-dev \
-            libonig-dev \
-            libxml2-dev \
-            default-mysql-client \
-            && docker-php-ext-configure gd --with-freetype --with-jpeg \
-            && docker-php-ext-install -j$(nproc) \
-                bcmath \
-                intl \
-                mbstring \
-                pdo_mysql \
-                zip \
-                gd \
-                opcache
+          set -eux
+          apt-get update
+
+          # basic tools
+          apt-get install -y git unzip curl ca-certificates gnupg2 lsb-release
+
+          # add the official PHP repo (deb.sury.org) – gives us newer PHP versions
+          curl -fsSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /usr/share/keyrings/php-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/php-archive-keyring.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" \
+            > /etc/apt/sources.list.d/php.list
+          apt-get update
+
+          # install PHP 8.2 + needed extensions
+          apt-get install -y php8.2-cli php8.2-common php8.2-fpm \
+            php8.2-mbstring php8.2-intl php8.2-pdo php8.2-mysql \
+            php8.2-gd php8.2-zip php8.2-opcache php8.2-bcmath \
+            php8.2-xml php8.2-curl
+
+          # make the php binary the default `php` command
+          update-alternatives --set php /usr/bin/php8.2
+
+          php -v
 
       # --------------------------------------------------------------
       # 3️⃣ Install Composer (official installer)
@@ -81,7 +82,7 @@ jobs:
         run: composer install --prefer-dist --no-interaction --optimize-autoloader
 
       # --------------------------------------------------------------
-      # 5️⃣ Build a minimal settings.php that points at the MySQL service
+      # 5️⃣ Prepare a minimal settings.php that points at the MySQL service
       # --------------------------------------------------------------
       - name: Prepare settings.php
         run: |
@@ -118,7 +119,7 @@ jobs:
         run: vendor/bin/drush updatedb -y
 
       # --------------------------------------------------------------
-      # 7️⃣ Enable a couple of core modules (prove “enable stuff” works)
+      # 7️⃣ Enable a few core modules (prove “enable stuff” works)
       # --------------------------------------------------------------
       - name: Enable core modules
         run: |
@@ -133,3 +134,14 @@ jobs:
           SIMPLETEST_DB: mysql://drupal:drupal@127.0.0.1:3306/drupal
         run: |
           vendor/bin/phpunit -c core phpunit.xml.dist --testsuite=unit --exclude-group=skipOnTravis
+
+      # --------------------------------------------------------------
+      # 9️⃣ Optional: cache Composer downloads for faster next runs
+      # --------------------------------------------------------------
+      - name: Cache Composer packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
