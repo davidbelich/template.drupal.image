@@ -1,15 +1,20 @@
 # .forgejo/workflows/drupal.yml
-name: Drupal CI
+name: Drupal CI (Forgejo)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   drupal-test:
-    runs-on: codeberg-small            # Forgejo’s default runner image
+    # Run the whole job inside a PHP image that already has the interpreter.
+    runs-on: ubuntu-latest
+    container:
+      image: php:8.2-cli               # Official PHP CLI image (Debian‑based)
+      options: --user root             # Needed so we can apt‑get install packages
+
     services:
       mysql:
         image: mysql:8.0
@@ -26,37 +31,63 @@ jobs:
           --health-retries=3
 
     steps:
-      # ------------------------------------------------------------------
-      # 1️⃣ Checkout the repo
-      # ------------------------------------------------------------------
+      # --------------------------------------------------------------
+      # 1️⃣ Checkout the repository (Forgejo provides the same step)
+      # --------------------------------------------------------------
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4   # This is a generic checkout step that works on Forgejo
 
-      # ------------------------------------------------------------------
-      # 2️⃣ Set up PHP + extensions needed by Drupal
-      # ------------------------------------------------------------------
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: mbstring, intl, pdo_mysql, gd, zip, opcache
-          ini-values: |
-            memory_limit = 512M
-            max_execution_time = 300
+      # --------------------------------------------------------------
+      # 2️⃣ Install system dependencies (PHP extensions, git, unzip)
+      # --------------------------------------------------------------
+      - name: Install OS packages & PHP extensions
+        run: |
+          apt-get update && apt-get install -y \
+            git \
+            unzip \
+            libzip-dev \
+            libpng-dev \
+            libjpeg62-turbo-dev \
+            libfreetype6-dev \
+            zlib1g-dev \
+            libicu-dev \
+            libonig-dev \
+            libxml2-dev \
+            default-mysql-client \
+            && docker-php-ext-configure gd --with-freetype --with-jpeg \
+            && docker-php-ext-install -j$(nproc) \
+                bcmath \
+                intl \
+                mbstring \
+                pdo_mysql \
+                zip \
+                gd \
+                opcache
 
-      # ------------------------------------------------------------------
-      # 3️⃣ Install Composer dependencies (Drupal core + any modules)
-      # ------------------------------------------------------------------
-      - name: Install Composer dependencies
+      # --------------------------------------------------------------
+      # 3️⃣ Install Composer (official installer)
+      # --------------------------------------------------------------
+      - name: Install Composer
+        run: |
+          php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+          php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+          php -r "unlink('composer-setup.php');"
+          composer --version
+
+      # --------------------------------------------------------------
+      # 4️⃣ Pull in Composer dependencies (Drupal core + any modules)
+      # --------------------------------------------------------------
+      - name: Composer install
         run: composer install --prefer-dist --no-interaction --optimize-autoloader
 
-      # ------------------------------------------------------------------
-      # 4️⃣ Create a temporary settings file pointing at the MySQL service
-      # ------------------------------------------------------------------
+      # --------------------------------------------------------------
+      # 5️⃣ Build a minimal settings.php that points at the MySQL service
+      # --------------------------------------------------------------
       - name: Prepare settings.php
         run: |
           cp web/sites/default/default.settings.php web/sites/default/settings.php
-          echo "\$databases['default']['default'] = [
+          cat <<'EOF' >> web/sites/default/settings.php
+          $databases['default']['default'] = [
             'driver' => 'mysql',
             'database' => 'drupal',
             'username' => 'drupal',
@@ -64,12 +95,13 @@ jobs:
             'host' => '127.0.0.1',
             'port' => '3306',
             'prefix' => '',
-          ];" >> web/sites/default/settings.php
+          ];
+          EOF
           chmod 664 web/sites/default/settings.php
 
-      # ------------------------------------------------------------------
-      # 5️⃣ Site installation (minimal profile) + DB update
-      # ------------------------------------------------------------------
+      # --------------------------------------------------------------
+      # 6️⃣ Install the site (minimal profile) and run DB updates
+      # --------------------------------------------------------------
       - name: Install Drupal site
         env:
           DRUPAL_SITE_NAME: "CI Test Site"
@@ -85,19 +117,19 @@ jobs:
       - name: Run database updates
         run: vendor/bin/drush updatedb -y
 
-      # ------------------------------------------------------------------
-      # 6️⃣ Enable a few core modules to prove “enable stuff” works
-      # ------------------------------------------------------------------
+      # --------------------------------------------------------------
+      # 7️⃣ Enable a couple of core modules (prove “enable stuff” works)
+      # --------------------------------------------------------------
       - name: Enable core modules
         run: |
-          vendor/bin/drush en path,toolbar,block -y
+          vendor/bin/drush en path toolbar block -y
 
-      # ------------------------------------------------------------------
-      # 7️⃣ Run Drupal's built‑in PHPUnit tests (smoke test)
-      # ------------------------------------------------------------------
+      # --------------------------------------------------------------
+      # 8️⃣ Run a quick PHPUnit smoke‑test suite
+      # --------------------------------------------------------------
       - name: Run PHPUnit
+        env:
+          SIMPLETEST_BASE_URL: http://localhost
+          SIMPLETEST_DB: mysql://drupal:drupal@127.0.0.1:3306/drupal
         run: |
-          # Ensure the test environment knows where Drupal lives
-          export SIMPLETEST_BASE_URL="http://localhost"
-          export SIMPLETEST_DB="mysql://drupal:drupal@127.0.0.1:3306/drupal"
           vendor/bin/phpunit -c core phpunit.xml.dist --testsuite=unit --exclude-group=skipOnTravis
