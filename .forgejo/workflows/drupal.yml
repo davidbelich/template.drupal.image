@@ -10,7 +10,7 @@ on:
 jobs:
   drupal-test:
     # Run the whole job inside a PHP image that already has the interpreter.
-    runs-on: ubuntu-latest
+    runs-on: codeberg-small
     container:
       image: php:8.2-cli               # Official PHP CLI image (Debian‑based)
       options: --user root             # Needed so we can apt‑get install packages
