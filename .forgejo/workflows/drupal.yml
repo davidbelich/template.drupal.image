@@ -133,7 +133,7 @@ jobs:
           SIMPLETEST_BASE_URL: http://localhost
           SIMPLETEST_DB: mysql://drupal:drupal@127.0.0.1:3306/drupal
         run: |
-          vendor/bin/phpunit -c core phpunit.xml.dist --testsuite=unit --exclude-group=skipOnTravis
+          vendor/bin/phpunit -c phpunit.xml.dist --testsuite=unit --exclude-group=skipOnTravis
 
       # --------------------------------------------------------------
       # 9️⃣ Optional: cache Composer downloads for faster next runs
