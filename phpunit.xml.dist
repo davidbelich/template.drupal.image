@@ -2,7 +2,7 @@
 <phpunit
     backupGlobals="false"
     colors="true"
-    bootstrap="core/tests/bootstrap.php"
+    bootstrap="web/core/tests/bootstrap.php"
     cacheResultFile=".phpunit.result.cache"
     failOnRisky="true"
     failOnWarning="true"
