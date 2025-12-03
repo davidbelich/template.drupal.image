@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    backupGlobals="false"
+    colors="true"
+    bootstrap="core/tests/bootstrap.php"
+    cacheResultFile=".phpunit.result.cache"
+    failOnRisky="true"
+    failOnWarning="true"
+    stopOnFailure="false"
+    printerClass="Drupal\Tests\Listeners\DrupalTestListener"
+    beStrictAboutCoversAnnotation="true"
+    beStrictAboutOutputDuringTests="true"
+    beStrictAboutChangesToGlobalState="true"
+    beStrictAboutResourceUsageDuringSmallTests="true"
+    beStrictAboutTestsThatDoNotTestAnything="true"
+    beStrictAboutTodoAnnotatedTests="true"
+    processIsolation="false">
+
+  <!-- ---------------------------------------------------------
+       Global PHP INI overrides – useful for a CI environment
+       --------------------------------------------------------- -->
+  <php>
+    <!-- Increase memory limit for large test suites -->
+    <ini name="memory_limit" value="-1"/>
+    <!-- Show all errors/warnings during tests -->
+    <ini name="error_reporting" value="-1"/>
+    <ini name="display_errors" value="1"/>
+    <!-- Disable Xdebug (if present) – speeds up tests -->
+    <env name="XDEBUG_MODE" value="off"/>
+    <!-- Drupal‑specific env vars – adjust if you use a different DB -->
+    <env name="SIMPLETEST_DB" value="sqlite://localhost/sites/default/files/.ht.sqlite"/>
+    <env name="SIMPLETEST_BASE_URL" value="http://localhost"/>
+    <env name="SIMPLTEST_FILEMASK" value="/tmp/drupal-tests-*.txt"/>
+  </php>
+
+  <!-- ---------------------------------------------------------
+       Directories containing test classes
+       --------------------------------------------------------- -->
+  <testsuites>
+    <!-- Core unit tests (fast, no DB) -->
+    <testsuite name="Unit">
+      <directory suffix="Test.php">core/modules</directory>
+      <directory suffix="Test.php">core/lib</directory>
+    </testsuite>
+
+    <!-- Kernel tests (bootstraps a minimal kernel) -->
+    <testsuite name="Kernel">
+      <directory suffix="Test.php">core/modules/*/tests/src/Kernel</directory>
+    </testsuite>
+
+    <!-- Functional tests (full HTTP stack) -->
+    <testsuite name="Functional">
+      <directory suffix="Test.php">core/modules/*/tests/src/Functional</directory>
+    </testsuite>
+
+    <!-- FunctionalJavascript tests (browser‑level) – optional -->
+    <testsuite name="FunctionalJavascript">
+      <directory suffix="Test.php">core/modules/*/tests/src/FunctionalJavascript</directory>
+    </testsuite>
+  </testsuites>
+
+  <!-- ---------------------------------------------------------
+       Logging / output
+       --------------------------------------------------------- -->
+  <logging>
+    <!-- JUnit XML for CI dashboards (e.g., GitLab, Jenkins) -->
+    <log type="junit" target="build/logs/junit.xml"/>
+    <!-- Coverage report – requires Xdebug or PCOV -->
+    <log type="coverage-html" target="build/coverage"/>
+  </logging>
+
+</phpunit>
